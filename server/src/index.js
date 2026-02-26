@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const db = require('./config/db');
 
 // Import routes
 const categoryRoutes = require('./routes/categoryRoutes');
@@ -9,20 +8,6 @@ const productRoutes = require('./routes/productRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-
-// Cleanup orphaned BoM records on startup (safety measure)
-setTimeout(() => {
-  db.run(
-    'DELETE FROM bill_of_materials WHERE product_id NOT IN (SELECT id FROM products)',
-    function(err) {
-      if (err) {
-        console.error('Error cleaning orphaned BoM records:', err.message);
-      } else if (this.changes > 0) {
-        console.log(`Cleaned up ${this.changes} orphaned BoM record(s)`);
-      }
-    }
-  );
-}, 1000);
 
 // Middleware
 app.use(cors());
