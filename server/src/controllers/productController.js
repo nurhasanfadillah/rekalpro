@@ -1,35 +1,9 @@
 const { v4: uuidv4 } = require('uuid');
-const db = require('../config/db');
-
-// Helper: Promisify SQLite operations
-const runAsync = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function(err) {
-      if (err) reject(err);
-      else resolve({ lastID: this.lastID, changes: this.changes });
-    });
-  });
-};
-
-const getAsync = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
-};
-
-const allAsync = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-};
+const supabase = require('../config/supabase');
+const { uploadImage, deleteImage } = require('../services/storageService');
 
 // Calculate HPP and related values
+
 
 function calculateCosts(totalMaterialCost, overheadPercentage, targetMarginPercentage) {
   // HPP = Total Biaya Material / (1 - Overhead%)
@@ -49,53 +23,71 @@ function calculateCosts(totalMaterialCost, overheadPercentage, targetMarginPerce
 }
 
 // Get all products
-exports.getAllProducts = (req, res) => {
-  db.all(
-    'SELECT id, name, description, image_url, total_material_cost, production_cost, estimated_selling_price, gross_profit_per_unit, created_at FROM products ORDER BY name',
-    [],
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json(rows);
-    }
-  );
+exports.getAllProducts = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, name, description, image_url, total_material_cost, production_cost, estimated_selling_price, gross_profit_per_unit, created_at')
+      .order('name');
+    
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
 
+
 // Get product by ID with BoM details
-exports.getProductById = (req, res) => {
+exports.getProductById = async (req, res) => {
   const { id } = req.params;
   
-  db.get('SELECT * FROM products WHERE id = ?', [id], (err, product) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+  try {
+    // Get product
+    const { data: product, error: prodError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (prodError) throw prodError;
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
     
     // Get BoM with material details
-    const bomQuery = `
-      SELECT b.*, m.name as material_name, m.unit as material_unit, c.name as category_name
-      FROM bill_of_materials b
-      JOIN materials m ON b.material_id = m.id
-      JOIN categories c ON m.category_id = c.id
-      WHERE b.product_id = ?
-      ORDER BY m.name
-    `;
+    const { data: bomItems, error: bomError } = await supabase
+      .from('bill_of_materials')
+      .select(`
+        *,
+        materials (
+          name,
+          unit,
+          categories (name)
+        )
+      `)
+      .eq('product_id', id)
+      .order('materials(name)');
     
-    db.all(bomQuery, [id], (err, bomItems) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      res.json({
-        ...product,
-        bill_of_materials: bomItems
-      });
+    if (bomError) throw bomError;
+    
+    // Transform BoM data to match expected format
+    const transformedBom = (bomItems || []).map(b => ({
+      ...b,
+      material_name: b.materials?.name,
+      material_unit: b.materials?.unit,
+      category_name: b.materials?.categories?.name
+    }));
+    
+    res.json({
+      ...product,
+      bill_of_materials: transformedBom
     });
-  });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
+
 
 // Create product with BoM
 exports.createProduct = async (req, res) => {
@@ -142,66 +134,76 @@ exports.createProduct = async (req, res) => {
   const costs = calculateCosts(totalMaterialCost, overhead_percentage, target_margin_percentage);
   
   try {
-    await runAsync('BEGIN TRANSACTION');
-    
     // Insert product
-    try {
-      await runAsync(
-        `INSERT INTO products (
-          id, name, description, image_url, overhead_percentage, target_margin_percentage,
-          total_material_cost, production_cost, estimated_selling_price, gross_profit_per_unit
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id,
-          name.trim(),
-          description || '',
-          image_url || '',
-          overhead_percentage,
-          target_margin_percentage,
-          Math.round(totalMaterialCost * 100) / 100,
-          costs.productionCost,
-          costs.estimatedSellingPrice,
-          costs.grossProfitPerUnit
-        ]
-      );
-    } catch (err) {
-      await runAsync('ROLLBACK');
-      if (err.message.includes('UNIQUE constraint failed')) {
+    const { data: product, error: prodError } = await supabase
+      .from('products')
+      .insert({
+        id,
+        name: name.trim(),
+        description: description || '',
+        image_url: image_url || '',
+        overhead_percentage,
+        target_margin_percentage,
+        total_material_cost: Math.round(totalMaterialCost * 100) / 100,
+        production_cost: costs.productionCost,
+        estimated_selling_price: costs.estimatedSellingPrice,
+        gross_profit_per_unit: costs.grossProfitPerUnit
+      })
+      .select()
+      .single();
+    
+    if (prodError) {
+      if (prodError.code === '23505' || prodError.message.includes('unique constraint')) {
         return res.status(400).json({ error: 'Product name already exists' });
       }
-      throw err;
+      throw prodError;
     }
     
-    // Insert BoM items sequentially to avoid race conditions
-    for (const item of bomItems) {
-      await runAsync(
-        'INSERT INTO bill_of_materials (id, product_id, material_id, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
-        [item.id, id, item.material_id, item.price, item.quantity, item.subtotal]
-      );
-    }
+    // Insert BoM items
+    const bomData = bomItems.map(item => ({
+      ...item,
+      product_id: id
+    }));
     
-    await runAsync('COMMIT');
+    const { error: bomError } = await supabase
+      .from('bill_of_materials')
+      .insert(bomData);
     
-    // Return created product
-    const product = await getAsync('SELECT * FROM products WHERE id = ?', [id]);
-    const bomRows = await allAsync(
-      `SELECT b.*, m.name as material_name, m.unit as material_unit, c.name as category_name
-       FROM bill_of_materials b
-       JOIN materials m ON b.material_id = m.id
-       JOIN categories c ON m.category_id = c.id
-       WHERE b.product_id = ? ORDER BY m.name`,
-      [id]
-    );
+    if (bomError) throw bomError;
+    
+    // Get BoM with material details
+    const { data: bomRows, error: bomRowsError } = await supabase
+      .from('bill_of_materials')
+      .select(`
+        *,
+        materials (
+          name,
+          unit,
+          categories (name)
+        )
+      `)
+      .eq('product_id', id)
+      .order('materials(name)');
+    
+    if (bomRowsError) throw bomRowsError;
+    
+    // Transform BoM data
+    const transformedBom = (bomRows || []).map(b => ({
+      ...b,
+      material_name: b.materials?.name,
+      material_unit: b.materials?.unit,
+      category_name: b.materials?.categories?.name
+    }));
     
     res.status(201).json({
       ...product,
-      bill_of_materials: bomRows
+      bill_of_materials: transformedBom
     });
   } catch (err) {
-    await runAsync('ROLLBACK').catch(() => {});
     return res.status(500).json({ error: err.message });
   }
 };
+
 
 
 // Update product with BoM
@@ -248,83 +250,88 @@ exports.updateProduct = async (req, res) => {
   const costs = calculateCosts(totalMaterialCost, overhead_percentage, target_margin_percentage);
   
   try {
-    await runAsync('BEGIN TRANSACTION');
-    
     // Update product
-    let result;
-    try {
-      result = await runAsync(
-        `UPDATE products SET
-          name = ?,
-          description = ?,
-          image_url = ?,
-          overhead_percentage = ?,
-          target_margin_percentage = ?,
-          total_material_cost = ?,
-          production_cost = ?,
-          estimated_selling_price = ?,
-          gross_profit_per_unit = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`,
-        [
-          name.trim(),
-          description || '',
-          image_url || '',
-          overhead_percentage,
-          target_margin_percentage,
-          Math.round(totalMaterialCost * 100) / 100,
-          costs.productionCost,
-          costs.estimatedSellingPrice,
-          costs.grossProfitPerUnit,
-          id
-        ]
-      );
-    } catch (err) {
-      await runAsync('ROLLBACK');
-      if (err.message.includes('UNIQUE constraint failed')) {
+    const { data: product, error: prodError } = await supabase
+      .from('products')
+      .update({
+        name: name.trim(),
+        description: description || '',
+        image_url: image_url || '',
+        overhead_percentage,
+        target_margin_percentage,
+        total_material_cost: Math.round(totalMaterialCost * 100) / 100,
+        production_cost: costs.productionCost,
+        estimated_selling_price: costs.estimatedSellingPrice,
+        gross_profit_per_unit: costs.grossProfitPerUnit
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (prodError) {
+      if (prodError.code === '23505' || prodError.message.includes('unique constraint')) {
         return res.status(400).json({ error: 'Product name already exists' });
       }
-      throw err;
+      throw prodError;
     }
     
-    if (result.changes === 0) {
-      await runAsync('ROLLBACK');
+    if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
     
     // Delete old BoM items
-    await runAsync('DELETE FROM bill_of_materials WHERE product_id = ?', [id]);
+    const { error: deleteError } = await supabase
+      .from('bill_of_materials')
+      .delete()
+      .eq('product_id', id);
     
-    // Insert new BoM items sequentially
-    for (const item of bomItems) {
-      await runAsync(
-        'INSERT INTO bill_of_materials (id, product_id, material_id, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
-        [item.id, id, item.material_id, item.price, item.quantity, item.subtotal]
-      );
-    }
+    if (deleteError) throw deleteError;
     
-    await runAsync('COMMIT');
+    // Insert new BoM items
+    const bomData = bomItems.map(item => ({
+      ...item,
+      product_id: id
+    }));
     
-    // Return updated product
-    const product = await getAsync('SELECT * FROM products WHERE id = ?', [id]);
-    const bomRows = await allAsync(
-      `SELECT b.*, m.name as material_name, m.unit as material_unit, c.name as category_name
-       FROM bill_of_materials b
-       JOIN materials m ON b.material_id = m.id
-       JOIN categories c ON m.category_id = c.id
-       WHERE b.product_id = ? ORDER BY m.name`,
-      [id]
-    );
+    const { error: bomError } = await supabase
+      .from('bill_of_materials')
+      .insert(bomData);
+    
+    if (bomError) throw bomError;
+    
+    // Get BoM with material details
+    const { data: bomRows, error: bomRowsError } = await supabase
+      .from('bill_of_materials')
+      .select(`
+        *,
+        materials (
+          name,
+          unit,
+          categories (name)
+        )
+      `)
+      .eq('product_id', id)
+      .order('materials(name)');
+    
+    if (bomRowsError) throw bomRowsError;
+    
+    // Transform BoM data
+    const transformedBom = (bomRows || []).map(b => ({
+      ...b,
+      material_name: b.materials?.name,
+      material_unit: b.materials?.unit,
+      category_name: b.materials?.categories?.name
+    }));
     
     res.json({
       ...product,
-      bill_of_materials: bomRows
+      bill_of_materials: transformedBom
     });
   } catch (err) {
-    await runAsync('ROLLBACK').catch(() => {});
     return res.status(500).json({ error: err.message });
   }
 };
+
 
 
 // Delete product
@@ -332,32 +339,45 @@ exports.deleteProduct = async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Check product exists first
-    const row = await getAsync('SELECT id FROM products WHERE id = ?', [id]);
-    if (!row) {
+    // Check product exists and get image URL
+    const { data: product, error: checkError } = await supabase
+      .from('products')
+      .select('image_url')
+      .eq('id', id)
+      .single();
+    
+    if (checkError) throw checkError;
+    if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    await runAsync('BEGIN TRANSACTION');
-
-    try {
-      // Explicitly delete BoM records first (belt-and-suspenders, tidak hanya mengandalkan CASCADE)
-      await runAsync('DELETE FROM bill_of_materials WHERE product_id = ?', [id]);
-      
-      // Then delete the product
-      await runAsync('DELETE FROM products WHERE id = ?', [id]);
-      
-      await runAsync('COMMIT');
-      
-      res.json({ message: 'Product deleted successfully' });
-    } catch (err) {
-      await runAsync('ROLLBACK');
-      throw err;
+    // Delete BoM records first
+    const { error: bomError } = await supabase
+      .from('bill_of_materials')
+      .delete()
+      .eq('product_id', id);
+    
+    if (bomError) throw bomError;
+    
+    // Delete the product
+    const { error: deleteError } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+    
+    if (deleteError) throw deleteError;
+    
+    // Delete image from storage if exists
+    if (product.image_url) {
+      await deleteImage(product.image_url);
     }
+    
+    res.json({ message: 'Product deleted successfully' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 };
+
 
 
 // Duplicate product
@@ -366,16 +386,24 @@ exports.duplicateProduct = async (req, res) => {
   
   try {
     // Get original product
-    const product = await getAsync('SELECT * FROM products WHERE id = ?', [id]);
+    const { data: product, error: prodError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (prodError) throw prodError;
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
     
     // Get BoM items
-    const bomItems = await allAsync(
-      'SELECT material_id, price, quantity FROM bill_of_materials WHERE product_id = ?',
-      [id]
-    );
+    const { data: bomItems, error: bomError } = await supabase
+      .from('bill_of_materials')
+      .select('material_id, price, quantity')
+      .eq('product_id', id);
+    
+    if (bomError) throw bomError;
     
     // Create new product with "Copy of" prefix
     const newProduct = {
@@ -384,7 +412,7 @@ exports.duplicateProduct = async (req, res) => {
       image_url: product.image_url,
       overhead_percentage: product.overhead_percentage,
       target_margin_percentage: product.target_margin_percentage,
-      bill_of_materials: bomItems.map(item => ({
+      bill_of_materials: (bomItems || []).map(item => ({
         material_id: item.material_id,
         price: item.price,
         quantity: item.quantity

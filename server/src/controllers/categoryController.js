@@ -1,41 +1,68 @@
 const { v4: uuidv4 } = require('uuid');
-const db = require('../config/db');
+const supabase = require('../config/supabase');
 
 // Get all categories
-exports.getAllCategories = (req, res) => {
-  const query = `
-    SELECT c.*, COUNT(m.id) as material_count 
-    FROM categories c 
-    LEFT JOIN materials m ON c.id = m.category_id 
-    GROUP BY c.id 
-    ORDER BY c.name
-  `;
-  
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
+exports.getAllCategories = async (req, res) => {
+  try {
+    // Get all categories
+    const { data: categories, error: catError } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name');
+    
+    if (catError) throw catError;
+    
+    // Get material counts
+    const { data: materials, error: matError } = await supabase
+      .from('materials')
+      .select('category_id');
+    
+    if (matError) throw matError;
+    
+    // Count materials per category
+    const materialCounts = {};
+    materials.forEach(m => {
+      materialCounts[m.category_id] = (materialCounts[m.category_id] || 0) + 1;
+    });
+    
+    // Merge counts with categories
+    const result = categories.map(c => ({
+      ...c,
+      material_count: materialCounts[c.id] || 0
+    }));
+    
+    res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
+
 
 // Get category by ID
-exports.getCategoryById = (req, res) => {
+exports.getCategoryById = async (req, res) => {
   const { id } = req.params;
   
-  db.get('SELECT * FROM categories WHERE id = ?', [id], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!row) {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw error;
+    if (!data) {
       return res.status(404).json({ error: 'Category not found' });
     }
-    res.json(row);
-  });
+    
+    res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
 
+
 // Create category
-exports.createCategory = (req, res) => {
+exports.createCategory = async (req, res) => {
   const { name } = req.body;
   
   if (!name || name.trim() === '') {
@@ -44,29 +71,29 @@ exports.createCategory = (req, res) => {
   
   const id = uuidv4();
   
-  db.run(
-    'INSERT INTO categories (id, name) VALUES (?, ?)',
-    [id, name.trim()],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Category name already exists' });
-        }
-        return res.status(500).json({ error: err.message });
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({ id, name: name.trim() })
+      .select()
+      .single();
+    
+    if (error) {
+      if (error.code === '23505' || error.message.includes('unique constraint')) {
+        return res.status(400).json({ error: 'Category name already exists' });
       }
-      
-      db.get('SELECT * FROM categories WHERE id = ?', [id], (err, row) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.status(201).json(row);
-      });
+      throw error;
     }
-  );
+    
+    res.status(201).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
 
+
 // Update category
-exports.updateCategory = (req, res) => {
+exports.updateCategory = async (req, res) => {
   const { id } = req.params;
   const { name } = req.body;
   
@@ -74,57 +101,61 @@ exports.updateCategory = (req, res) => {
     return res.status(400).json({ error: 'Category name is required' });
   }
   
-  db.run(
-    'UPDATE categories SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [name.trim(), id],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Category name already exists' });
-        }
-        return res.status(500).json({ error: err.message });
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .update({ name: name.trim() })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      if (error.code === '23505' || error.message.includes('unique constraint')) {
+        return res.status(400).json({ error: 'Category name already exists' });
       }
-      
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Category not found' });
-      }
-      
-      db.get('SELECT * FROM categories WHERE id = ?', [id], (err, row) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.json(row);
-      });
-    }
-  );
-};
-
-// Delete category
-exports.deleteCategory = (req, res) => {
-  const { id } = req.params;
-  
-  // Check if category has materials
-  db.get('SELECT COUNT(*) as count FROM materials WHERE category_id = ?', [id], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+      throw error;
     }
     
-    if (row.count > 0) {
+    if (!data) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    res.json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+
+// Delete category
+exports.deleteCategory = async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Check if category has materials
+    const { data: materials, error: checkError } = await supabase
+      .from('materials')
+      .select('id')
+      .eq('category_id', id);
+    
+    if (checkError) throw checkError;
+    
+    if (materials && materials.length > 0) {
       return res.status(400).json({ 
         error: 'Gagal menghapus: Kosongkan material dalam kategori ini terlebih dahulu.' 
       });
     }
     
-    db.run('DELETE FROM categories WHERE id = ?', [id], function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Category not found' });
-      }
-      
-      res.json({ message: 'Category deleted successfully' });
-    });
-  });
+    // Delete category
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    
+    res.json({ message: 'Category deleted successfully' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };

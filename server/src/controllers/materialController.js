@@ -1,47 +1,66 @@
 const { v4: uuidv4 } = require('uuid');
-const db = require('../config/db');
+const supabase = require('../config/supabase');
 
 // Get all materials with category info
-exports.getAllMaterials = (req, res) => {
-  const query = `
-    SELECT m.*, c.name as category_name 
-    FROM materials m 
-    JOIN categories c ON m.category_id = c.id 
-    ORDER BY m.name
-  `;
-  
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
+exports.getAllMaterials = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('materials')
+      .select(`
+        *,
+        categories (name)
+      `)
+      .order('name');
+    
+    if (error) throw error;
+    
+    // Transform data to match expected format
+    const result = data.map(m => ({
+      ...m,
+      category_name: m.categories?.name
+    }));
+    
+    res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
+
 
 // Get material by ID
-exports.getMaterialById = (req, res) => {
+exports.getMaterialById = async (req, res) => {
   const { id } = req.params;
   
-  const query = `
-    SELECT m.*, c.name as category_name 
-    FROM materials m 
-    JOIN categories c ON m.category_id = c.id 
-    WHERE m.id = ?
-  `;
-  
-  db.get(query, [id], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!row) {
+  try {
+    const { data, error } = await supabase
+      .from('materials')
+      .select(`
+        *,
+        categories (name)
+      `)
+      .eq('id', id)
+      .single();
+    
+    if (error) throw error;
+    if (!data) {
       return res.status(404).json({ error: 'Material not found' });
     }
-    res.json(row);
-  });
+    
+    // Transform to match expected format
+    const result = {
+      ...data,
+      category_name: data.categories?.name
+    };
+    
+    res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
 
+
 // Create material
-exports.createMaterial = (req, res) => {
+exports.createMaterial = async (req, res) => {
   const { name, category_id, standard_price, unit } = req.body;
   
   // Validation
@@ -60,33 +79,39 @@ exports.createMaterial = (req, res) => {
   
   const id = uuidv4();
   
-  db.run(
-    'INSERT INTO materials (id, name, category_id, standard_price, unit) VALUES (?, ?, ?, ?, ?)',
-    [id, name.trim(), category_id, standard_price, unit],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      const query = `
-        SELECT m.*, c.name as category_name 
-        FROM materials m 
-        JOIN categories c ON m.category_id = c.id 
-        WHERE m.id = ?
-      `;
-      
-      db.get(query, [id], (err, row) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.status(201).json(row);
-      });
-    }
-  );
+  try {
+    const { data, error } = await supabase
+      .from('materials')
+      .insert({
+        id,
+        name: name.trim(),
+        category_id,
+        standard_price,
+        unit
+      })
+      .select(`
+        *,
+        categories (name)
+      `)
+      .single();
+    
+    if (error) throw error;
+    
+    // Transform to match expected format
+    const result = {
+      ...data,
+      category_name: data.categories?.name
+    };
+    
+    res.status(201).json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
 
+
 // Update material
-exports.updateMaterial = (req, res) => {
+exports.updateMaterial = async (req, res) => {
   const { id } = req.params;
   const { name, category_id, standard_price, unit } = req.body;
   
@@ -104,61 +129,70 @@ exports.updateMaterial = (req, res) => {
     return res.status(400).json({ error: 'Unit must be Pcs or Cm' });
   }
   
-  db.run(
-    'UPDATE materials SET name = ?, category_id = ?, standard_price = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [name.trim(), category_id, standard_price, unit, id],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Material not found' });
-      }
-      
-      const query = `
-        SELECT m.*, c.name as category_name 
-        FROM materials m 
-        JOIN categories c ON m.category_id = c.id 
-        WHERE m.id = ?
-      `;
-      
-      db.get(query, [id], (err, row) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.json(row);
-      });
-    }
-  );
-};
-
-// Delete material
-exports.deleteMaterial = (req, res) => {
-  const { id } = req.params;
-  
-  // Check if material is used in any BoM
-  db.get('SELECT COUNT(*) as count FROM bill_of_materials WHERE material_id = ?', [id], (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+  try {
+    const { data, error } = await supabase
+      .from('materials')
+      .update({
+        name: name.trim(),
+        category_id,
+        standard_price,
+        unit
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        categories (name)
+      `)
+      .single();
+    
+    if (error) throw error;
+    
+    if (!data) {
+      return res.status(404).json({ error: 'Material not found' });
     }
     
-    if (row.count > 0) {
+    // Transform to match expected format
+    const result = {
+      ...data,
+      category_name: data.categories?.name
+    };
+    
+    res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+
+// Delete material
+exports.deleteMaterial = async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Check if material is used in any BoM
+    const { data: bomItems, error: checkError } = await supabase
+      .from('bill_of_materials')
+      .select('id')
+      .eq('material_id', id);
+    
+    if (checkError) throw checkError;
+    
+    if (bomItems && bomItems.length > 0) {
       return res.status(400).json({ 
         error: 'Gagal menghapus: Material masih digunakan dalam komposisi produk.' 
       });
     }
     
-    db.run('DELETE FROM materials WHERE id = ?', [id], function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Material not found' });
-      }
-      
-      res.json({ message: 'Material deleted successfully' });
-    });
-  });
+    // Delete material
+    const { error } = await supabase
+      .from('materials')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    
+    res.json({ message: 'Material deleted successfully' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
