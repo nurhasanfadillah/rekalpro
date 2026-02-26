@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { materialApi } from '../api';
 
-function MaterialModal({ isOpen, onClose, material, categories, onSave }) {
+function MaterialModal({ isOpen, onClose, material, categories = [], onSave }) {
+
   const [formData, setFormData] = useState({
     name: '',
     category_id: '',
@@ -21,14 +22,18 @@ function MaterialModal({ isOpen, onClose, material, categories, onSave }) {
         unit: material.unit || 'Pcs',
       });
     } else {
+      // Defensive check: ensure categories is array and has items
+      const safeCategories = Array.isArray(categories) ? categories : [];
+      const defaultCategoryId = safeCategories.length > 0 ? safeCategories[0].id : '';
       setFormData({
         name: '',
-        category_id: categories[0]?.id || '',
+        category_id: defaultCategoryId,
         standard_price: '',
         unit: 'Pcs',
       });
     }
   }, [material, categories, isOpen]);
+
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -60,7 +65,26 @@ function MaterialModal({ isOpen, onClose, material, categories, onSave }) {
 
   if (!isOpen) return null;
 
+  // Defensive check for categories
+  const safeCategories = Array.isArray(categories) ? categories : [];
+  const hasCategories = safeCategories.length > 0;
+
+  if (!hasCategories) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 text-center">
+          <h2 className="text-lg font-semibold mb-2">Tidak Ada Kategori</h2>
+          <p className="text-gray-500 mb-4">Silakan tambahkan kategori terlebih dahulu sebelum menambah material.</p>
+          <button onClick={onClose} className="btn-primary">
+            Tutup
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
+
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
         <div className="flex items-center justify-between p-4 border-b">

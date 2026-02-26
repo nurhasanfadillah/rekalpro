@@ -3,10 +3,10 @@ import { Home, Package, Layers, Grid, Plus } from 'lucide-react';
 
 const navItems = [
   { path: '/', label: 'Beranda', icon: Home, exact: true },
-  { path: '/products', label: 'Produk', icon: Package },
   { path: '/materials', label: 'Material', icon: Layers },
   { path: '/categories', label: 'Kategori', icon: Grid },
 ];
+
 
 function MobileNav() {
   const location = useLocation();

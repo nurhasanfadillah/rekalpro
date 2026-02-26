@@ -34,8 +34,22 @@ function CategoryModal({ isOpen, onClose, category, onSave }) {
       onSave();
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error || 'Terjadi kesalahan');
+      console.error('Category save error:', err);
+      let errorMsg = 'Terjadi kesalahan';
+      if (err.response?.data?.error) {
+        errorMsg = err.response.data.error;
+      } else if (err.response?.status === 400) {
+        errorMsg = 'Data tidak valid. Periksa kembali input Anda.';
+      } else if (err.response?.status === 500) {
+        errorMsg = 'Server error. Silakan coba lagi nanti.';
+      } else if (!navigator.onLine) {
+        errorMsg = 'Tidak ada koneksi internet. Periksa koneksi Anda.';
+      } else if (err.message) {
+        errorMsg = `Error: ${err.message}`;
+      }
+      setError(errorMsg);
     } finally {
+
       setLoading(false);
     }
   };

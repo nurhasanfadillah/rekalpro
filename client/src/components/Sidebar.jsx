@@ -3,10 +3,10 @@ import { Home, Layers, Grid, Package, ChevronLeft, ChevronRight, BarChart2 } fro
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Home, exact: true },
-  { path: '/products', label: 'Produk', icon: Package },
   { path: '/materials', label: 'Katalog Material', icon: Layers },
   { path: '/categories', label: 'Kategori', icon: Grid },
 ];
+
 
 function Sidebar({ collapsed, onToggleCollapse }) {
   const location = useLocation();
