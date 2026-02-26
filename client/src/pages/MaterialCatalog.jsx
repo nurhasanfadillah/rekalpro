@@ -145,72 +145,81 @@ function MaterialCatalog() {
           <p className="page-subtitle">Kelola daftar bahan baku dan harga standar</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Refresh button - visible on mobile */}
+          {/* Refresh button - visible on mobile with enhanced styling */}
           <button 
             onClick={handleRefresh}
             disabled={loading}
-            className="md:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            className="md:hidden p-2.5 rounded-xl text-gray-500 hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all disabled:opacity-50"
             title="Refresh data"
           >
             <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button onClick={handleAdd} className="btn-primary flex items-center gap-2">
+          <button onClick={handleAdd} className="btn-primary flex items-center gap-2 haptic-touch">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Tambah Material</span>
             <span className="sm:hidden">Tambah</span>
           </button>
         </div>
+
       </div>
 
-      {/* Offline indicator for cached data */}
+      {/* Offline indicator for cached data - Enhanced */}
       {fromCache && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-2 text-blue-700 text-sm">
-          <WifiOff className="h-4 w-4" />
-          <span>Data dari penyimpanan lokal</span>
+        <div className="mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/60 rounded-2xl px-4 py-3.5 flex items-center gap-3 text-blue-700 text-sm shadow-sm">
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 flex-shrink-0">
+            <WifiOff className="h-4 w-4" />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-blue-900">Data Tersimpan</p>
+            <p className="text-blue-600/80 text-xs">Menampilkan data dari penyimpanan lokal</p>
+          </div>
           <button 
             onClick={handleRefresh}
-            className="ml-auto text-blue-600 hover:text-blue-800 font-medium"
+            className="px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-blue-600 hover:bg-blue-50 active:bg-blue-100 font-medium text-xs transition-all active:scale-95"
           >
             Refresh
           </button>
         </div>
       )}
 
-      {/* Search */}
+
+      {/* Search - Enhanced Mobile */}
       <div className="search-wrapper">
-        <Search className="search-icon" />
+        <Search className="search-icon h-5 w-5" />
         <input
           type="text"
-          placeholder="Cari material atau kategori..."
+          placeholder="Cari material..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="input-search"
+          className="input-search md:input-search text-base md:text-sm h-12 md:h-auto"
         />
       </div>
+
 
       {/* Content */}
       {loading ? (
         <TableSkeleton />
       ) : filteredMaterials.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-gray-100 shadow-sm">
-          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Layers className="h-8 w-8 text-gray-400" />
+        <div className="empty-state-mobile bg-white rounded-2xl border border-gray-100 shadow-sm mx-4 md:mx-0">
+          <div className="empty-state-icon-mobile">
+            <Layers className="h-10 w-10 text-gray-400" />
           </div>
-          <h3 className="text-base font-semibold text-gray-900">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">
             {searchTerm ? 'Material tidak ditemukan' : 'Belum ada material'}
           </h3>
-          <p className="text-sm text-gray-500 mt-1 mb-5">
+          <p className="text-sm text-gray-500 mb-6 max-w-xs">
             {searchTerm
               ? `Tidak ada material yang cocok dengan "${searchTerm}"`
               : 'Tambahkan material untuk digunakan dalam produk'}
           </p>
           {!searchTerm && (
-            <button onClick={handleAdd} className="btn-primary inline-flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Tambah Material
+            <button onClick={handleAdd} className="btn-mobile-primary md:btn-primary">
+              <Plus className="h-5 w-5" />
+              Tambah Material Baru
             </button>
           )}
         </div>
+
       ) : (
         <>
           {/* Desktop Table */}
@@ -265,31 +274,60 @@ function MaterialCatalog() {
             </div>
           </div>
 
-          {/* Mobile Cards */}
+          {/* Mobile Cards - Enhanced Native Style */}
           <div className="md:hidden grid grid-cols-1 gap-3">
             {filteredMaterials.map((material) => (
-              <div key={material.id} className="card">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-sm">{material.name}</h3>
-                    <span className="badge-blue mt-1 inline-block">{material.category_name}</span>
+              <div key={material.id} className="card-mobile group">
+                <div className="p-4">
+                  {/* Header with actions */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 text-base leading-tight">
+                        {material.name}
+                      </h3>
+                      <span className="badge-blue mt-1.5 inline-flex items-center">
+                        {material.category_name}
+                      </span>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button 
+                        onClick={() => handleEdit(material)} 
+                        className="p-2.5 text-blue-600 hover:bg-blue-50 active:bg-blue-100 rounded-xl transition-all active:scale-95"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteClick(material)} 
+                        className="p-2.5 text-red-500 hover:bg-red-50 active:bg-red-100 rounded-xl transition-all active:scale-95"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => handleEdit(material)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl">
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => handleDeleteClick(material)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  
+                  {/* Divider */}
+                  <div className="divider-mobile" />
+                  
+                  {/* Price info */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-mobile-label">Harga Standar</p>
+                      <p className="text-lg font-bold text-gray-800">
+                        {formatCurrency(material.standard_price)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-mobile-label">Satuan</p>
+                      <p className="text-sm font-semibold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
+                        {material.unit}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
-                  <span>Harga: <span className="font-semibold text-gray-700">{formatCurrency(material.standard_price)}</span></span>
-                  <span>/{material.unit}</span>
                 </div>
               </div>
             ))}
           </div>
+
         </>
       )}
 

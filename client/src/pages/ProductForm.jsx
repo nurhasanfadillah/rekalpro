@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Save, Package } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Save, Package, Layers, Calculator, AlertCircle } from 'lucide-react';
+
 import { productApi, materialApi } from '../api';
 import { useToast } from '../context/ToastContext';
 
@@ -193,145 +194,269 @@ function ProductForm() {
 
   return (
     <div className="page-container">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      {/* Header - Enhanced Mobile */}
+      <div className="flex items-start gap-3 mb-6">
         <button
           onClick={() => navigate(isEdit ? `/products/${id}` : '/')}
-          className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+          className="p-2.5 hover:bg-gray-100 active:bg-gray-200 rounded-xl transition-all flex-shrink-0 active:scale-95 mt-0.5"
         >
-          <ArrowLeft className="h-5 w-5 text-gray-600" />
+          <ArrowLeft className="h-5 w-5 text-gray-600" strokeWidth={2} />
         </button>
-        <div>
-          <h1 className="page-title">{isEdit ? 'Edit Produk' : 'Tambah Produk Baru'}</h1>
-          <p className="page-subtitle">{isEdit ? 'Perbarui informasi dan komposisi produk' : 'Isi informasi produk dan komposisi material'}</p>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-tight">
+            {isEdit ? 'Edit Produk' : 'Tambah Produk Baru'}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {isEdit ? 'Perbarui informasi dan komposisi produk' : 'Isi informasi produk dan komposisi material'}
+          </p>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-2">
-          <span className="w-4 h-4 rounded-full bg-red-200 text-red-700 flex items-center justify-center text-xs font-bold flex-shrink-0">!</span>
-          {error}
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3.5 rounded-xl mb-6 text-sm flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" strokeWidth={2} />
+          <span className="flex-1">{error}</span>
         </div>
       )}
 
+
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Info */}
-        <div className="card">
-          <h2 className="text-sm font-semibold text-gray-800 mb-4 pb-3 border-b border-gray-100">Informasi Produk</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="label">Nama Produk <span className="text-red-500">*</span></label>
-              <input type="text" name="name" value={formData.name} onChange={handleChange} className="input" placeholder="Contoh: CLUTA D300 HITAM" required />
+        {/* Basic Info - Enhanced Mobile */}
+        <div className="card-mobile-elevated md:card p-4 md:p-5">
+          <h2 className="text-sm font-semibold text-gray-800 mb-4 pb-3 border-b border-gray-100 flex items-center gap-2">
+            <Package className="h-4 w-4 text-gray-500" />
+            Informasi Produk
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-medium text-gray-700">Nama Produk <span className="text-red-500">*</span></label>
+              <input 
+                type="text" 
+                name="name" 
+                value={formData.name} 
+                onChange={handleChange} 
+                className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                placeholder="Contoh: CLUTA D300 HITAM" 
+                required 
+              />
             </div>
-            <div className="md:col-span-2">
-              <label className="label">Deskripsi</label>
-              <textarea name="description" value={formData.description} onChange={handleChange} className="input resize-none" rows="3" placeholder="Deskripsi singkat produk (opsional)" />
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-medium text-gray-700">Deskripsi</label>
+              <textarea 
+                name="description" 
+                value={formData.description} 
+                onChange={handleChange} 
+                className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none" 
+                rows="3" 
+                placeholder="Deskripsi singkat produk (opsional)" 
+              />
             </div>
-            <div>
-              <label className="label">% Overhead <span className="text-red-500">*</span></label>
-              <input type="number" name="overhead_percentage" value={formData.overhead_percentage} onChange={handleChange} className="input" min="0" max="99" step="0.1" required />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">% Overhead <span className="text-red-500">*</span></label>
+              <input 
+                type="number" 
+                name="overhead_percentage" 
+                value={formData.overhead_percentage} 
+                onChange={handleChange} 
+                className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                min="0" 
+                max="99" 
+                step="0.1" 
+                required 
+              />
               <p className="text-xs text-gray-400 mt-1.5">Biaya tidak langsung (listrik, sewa, dll)</p>
             </div>
-            <div>
-              <label className="label">% Target Margin Profit <span className="text-red-500">*</span></label>
-              <input type="number" name="target_margin_percentage" value={formData.target_margin_percentage} onChange={handleChange} className="input" min="0" max="99" step="0.1" required />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">% Target Margin <span className="text-red-500">*</span></label>
+              <input 
+                type="number" 
+                name="target_margin_percentage" 
+                value={formData.target_margin_percentage} 
+                onChange={handleChange} 
+                className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                min="0" 
+                max="99" 
+                step="0.1" 
+                required 
+              />
               <p className="text-xs text-gray-400 mt-1.5">Keuntungan yang diinginkan</p>
             </div>
           </div>
         </div>
 
-        {/* BoM Editor */}
-        <div className="card">
+
+        {/* BoM Editor - Enhanced Mobile */}
+        <div className="card-mobile-elevated md:card p-4 md:p-5">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-800">Komposisi Material (BoM)</h2>
-            <button type="button" onClick={addBomItem} disabled={materials.length === 0} className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50">
+            <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <Layers className="h-4 w-4 text-gray-500" />
+              Komposisi Material (BoM)
+            </h2>
+            <button 
+              type="button" 
+              onClick={addBomItem} 
+              disabled={materials.length === 0} 
+              className="btn-primary flex items-center gap-2 text-sm haptic-touch disabled:opacity-50"
+            >
               <Plus className="h-4 w-4" />
-              Tambah Material
+              <span className="hidden sm:inline">Tambah Material</span>
+              <span className="sm:hidden">Tambah</span>
             </button>
           </div>
 
           {materials.length === 0 ? (
-            <div className="text-center py-10 bg-gray-50 rounded-xl">
-              <div className="w-12 h-12 bg-gray-200 rounded-xl flex items-center justify-center mx-auto mb-3">
-                <Package className="h-6 w-6 text-gray-400" />
+            <div className="empty-state-mobile py-8 bg-gray-50 rounded-xl">
+              <div className="empty-state-icon-mobile w-16 h-16">
+                <Package className="h-8 w-8 text-gray-400" />
               </div>
-              <p className="text-sm font-medium text-gray-600">Belum ada material tersedia</p>
-              <p className="text-xs text-gray-400 mt-1">Tambahkan material di halaman Katalog Material terlebih dahulu</p>
+              <p className="text-sm font-medium text-gray-600 mb-1">Belum ada material tersedia</p>
+              <p className="text-xs text-gray-400">Tambahkan material di halaman Katalog Material terlebih dahulu</p>
             </div>
           ) : bomItems.length === 0 ? (
             <div className="text-center py-10 bg-gray-50 rounded-xl">
-              <p className="text-sm text-gray-500">Klik <span className="font-semibold text-primary-600">"Tambah Material"</span> untuk menambahkan komposisi</p>
+              <p className="text-sm text-gray-500">Klik <span className="font-semibold text-primary-600">"Tambah"</span> untuk menambahkan komposisi</p>
             </div>
           ) : (
             <div className="space-y-3">
               {bomItems.map((item, index) => (
-                <div key={index} className="flex flex-wrap gap-3 items-end p-4 bg-gray-50 rounded-xl border border-gray-100">
-                  <div className="flex-1 min-w-[200px]">
-                    <label className="label text-xs">Material</label>
-                    <select value={item.material_id} onChange={(e) => updateBomItem(index, 'material_id', e.target.value)} className="input text-sm" required>
-                      {materials.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.category_name})</option>
-                      ))}
-                    </select>
+                <div key={index} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                  {/* Mobile Layout */}
+                  <div className="md:hidden p-4 space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-gray-500">Material</label>
+                      <select 
+                        value={item.material_id} 
+                        onChange={(e) => updateBomItem(index, 'material_id', e.target.value)} 
+                        className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        required
+                      >
+                        {materials.map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.category_name})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-gray-500">Harga (Rp)</label>
+                        <input 
+                          type="number" 
+                          value={item.price} 
+                          onChange={(e) => updateBomItem(index, 'price', e.target.value)} 
+                          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          min="0" 
+                          step="0.01" 
+                          required 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-gray-500">Qty ({item.unit})</label>
+                        <input 
+                          type="number" 
+                          value={item.quantity} 
+                          onChange={(e) => updateBomItem(index, 'quantity', e.target.value)} 
+                          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          min="0" 
+                          step="0.01" 
+                          required 
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                      <span className="text-xs text-gray-500">Subtotal</span>
+                      <span className="font-semibold text-gray-800">{formatCurrency(item.price * item.quantity)}</span>
+                      <button 
+                        type="button" 
+                        onClick={() => removeBomItem(index)} 
+                        className="p-2 text-red-500 hover:bg-red-50 active:bg-red-100 rounded-lg transition-all active:scale-95"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="w-32">
-                    <label className="label text-xs">Harga (Rp)</label>
-                    <input type="number" value={item.price} onChange={(e) => updateBomItem(index, 'price', e.target.value)} className="input text-sm" min="0" step="0.01" required />
+                  
+                  {/* Desktop Layout */}
+                  <div className="hidden md:flex flex-wrap gap-3 items-end p-4">
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="label text-xs">Material</label>
+                      <select value={item.material_id} onChange={(e) => updateBomItem(index, 'material_id', e.target.value)} className="input text-sm" required>
+                        {materials.map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.category_name})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="w-32">
+                      <label className="label text-xs">Harga (Rp)</label>
+                      <input type="number" value={item.price} onChange={(e) => updateBomItem(index, 'price', e.target.value)} className="input text-sm" min="0" step="0.01" required />
+                    </div>
+                    <div className="w-28">
+                      <label className="label text-xs">Qty ({item.unit})</label>
+                      <input type="number" value={item.quantity} onChange={(e) => updateBomItem(index, 'quantity', e.target.value)} className="input text-sm" min="0" step="0.01" required />
+                    </div>
+                    <div className="w-32">
+                      <label className="label text-xs">Subtotal</label>
+                      <p className="text-sm font-semibold text-gray-800 py-2.5">{formatCurrency(item.price * item.quantity)}</p>
+                    </div>
+                    <button type="button" onClick={() => removeBomItem(index)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors mb-0.5">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                  <div className="w-28">
-                    <label className="label text-xs">Qty ({item.unit})</label>
-                    <input type="number" value={item.quantity} onChange={(e) => updateBomItem(index, 'quantity', e.target.value)} className="input text-sm" min="0" step="0.01" required />
-                  </div>
-                  <div className="w-32">
-                    <label className="label text-xs">Subtotal</label>
-                    <p className="text-sm font-semibold text-gray-800 py-2.5">{formatCurrency(item.price * item.quantity)}</p>
-                  </div>
-                  <button type="button" onClick={() => removeBomItem(index)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors mb-0.5">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Cost Summary */}
-        <div className="bg-primary-50 border border-primary-100 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-primary-800 mb-4">Estimasi Biaya dan Harga</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+        {/* Cost Summary - Enhanced Mobile */}
+        <div className="bg-gradient-to-br from-primary-50 to-primary-100/50 border border-primary-200 rounded-2xl p-4 md:p-5">
+          <h2 className="text-sm font-semibold text-primary-800 mb-4 flex items-center gap-2">
+            <Calculator className="h-4 w-4" />
+            Estimasi Biaya dan Harga
+          </h2>
+          <div className="grid grid-cols-2 gap-3 md:gap-4">
             {[
-              { label: 'Total Biaya Material', value: totals.totalMaterialCost, color: 'text-primary-900' },
-              { label: 'HPP (Harga Pokok)', value: totals.productionCost, color: 'text-primary-900' },
-              { label: 'Estimasi Harga Jual', value: totals.sellingPrice, color: 'text-emerald-700' },
-              { label: 'Laba Kotor / Unit', value: totals.grossProfit, color: totals.grossProfit >= 0 ? 'text-emerald-700' : 'text-red-600' },
+              { label: 'Biaya Material', value: totals.totalMaterialCost, color: 'text-primary-900' },
+              { label: 'HPP', value: totals.productionCost, color: 'text-primary-900' },
+              { label: 'Harga Jual', value: totals.sellingPrice, color: 'text-emerald-700' },
+              { label: 'Laba/Unit', value: totals.grossProfit, color: totals.grossProfit >= 0 ? 'text-emerald-700' : 'text-red-600' },
             ].map((item, i) => (
-              <div key={i} className="bg-white rounded-xl p-3 border border-primary-100">
-                <p className="text-xs text-primary-600 font-medium">{item.label}</p>
-                <p className={`text-lg font-bold mt-1 ${item.color}`}>{formatCurrency(item.value)}</p>
+              <div key={i} className="bg-white rounded-xl p-3 md:p-4 border border-primary-100 shadow-sm">
+                <p className="text-xs text-primary-600 font-medium mb-1">{item.label}</p>
+                <p className={`text-base md:text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pb-4">
-          <button type="button" onClick={() => navigate(isEdit ? `/products/${id}` : '/')} className="btn-secondary" disabled={saving}>
+        {/* Actions - Enhanced Mobile */}
+        <div className="flex flex-col md:flex-row justify-end gap-3 pb-4 pt-2">
+          <button 
+            type="button" 
+            onClick={() => navigate(isEdit ? `/products/${id}` : '/')} 
+            className="w-full md:w-auto btn-secondary haptic-touch py-3.5 md:py-2 order-2 md:order-1" 
+            disabled={saving}
+          >
             Batal
           </button>
-          <button type="submit" className="btn-primary flex items-center gap-2" disabled={saving || bomItems.length === 0}>
+          <button 
+            type="submit" 
+            className="w-full md:w-auto btn-primary flex items-center justify-center gap-2 haptic-touch py-3.5 md:py-2 order-1 md:order-2" 
+            disabled={saving || bomItems.length === 0}
+          >
             {saving ? (
-              <>
+              <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Menyimpan...
-              </>
+              </span>
             ) : (
-              <>
+              <span className="flex items-center justify-center gap-2">
                 <Save className="h-4 w-4" />
                 Simpan Produk
-              </>
+              </span>
             )}
           </button>
         </div>
+
       </form>
     </div>
   );
