@@ -34,24 +34,29 @@ export function useOfflineData(fetchFn, storageKey, options = {}) {
     setIsOffline(!online);
 
     // Try to get cached data first
-    const cachedData = storage.get(storageKey)?.data;
+    const cachedItem = storage.get(storageKey);
+    const cachedData = cachedItem?.data;
     const isCacheValid = storage.isValid(storageKey);
 
+    // Validate cached data is array
+    const validCachedData = Array.isArray(cachedData) ? cachedData : null;
+
     // If we have valid cached data and not forcing refresh, use it immediately
-    if (cachedData && isCacheValid && !forceRefresh && immediate) {
-      setData(cachedData);
+    if (validCachedData && isCacheValid && !forceRefresh && immediate) {
+      setData(validCachedData);
       setLoading(false);
     }
 
     // If offline, use cached data
     if (!online) {
-      if (cachedData) {
-        setData(cachedData);
+      if (validCachedData) {
+        setData(validCachedData);
         setLoading(false);
-        return { data: cachedData, fromCache: true };
+        return { data: validCachedData, fromCache: true };
       } else {
-        setError('Tidak ada koneksi internet dan data tersedia');
+        setError('Tidak ada koneksi internet dan data tidak tersedia');
         setLoading(false);
+        setData([]); // Set empty array to prevent filter errors
         return { error: 'No data available offline', fromCache: false };
       }
     }
@@ -59,7 +64,8 @@ export function useOfflineData(fetchFn, storageKey, options = {}) {
     // Online: fetch fresh data
     try {
       const response = await fetchFn();
-      const freshData = response.data;
+      // Ensure response.data is array
+      const freshData = Array.isArray(response?.data) ? response.data : [];
       
       // Update state
       setData(freshData);
@@ -76,21 +82,23 @@ export function useOfflineData(fetchFn, storageKey, options = {}) {
       console.error('Fetch error:', err);
       
       // If fetch fails but we have cached data, use it
-      if (cachedData) {
-        setData(cachedData);
+      if (validCachedData) {
+        setData(validCachedData);
         setLoading(false);
-        if (onSuccessRef.current) onSuccessRef.current(cachedData);
-        return { data: cachedData, fromCache: true, error: err };
+        if (onSuccessRef.current) onSuccessRef.current(validCachedData);
+        return { data: validCachedData, fromCache: true, error: err };
       }
       
       setError(err.message || 'Gagal memuat data');
       setLoading(false);
+      setData([]); // Set empty array to prevent filter errors
       
       if (onErrorRef.current) onErrorRef.current(err);
       
       return { error: err, fromCache: false };
     }
   }, [fetchFn, storageKey, immediate]);
+
 
   // Store fetchData in ref to avoid dependency issues
   useEffect(() => {
