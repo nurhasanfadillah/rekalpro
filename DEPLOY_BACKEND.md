@@ -27,10 +27,16 @@ Aplikasi frontend di Netlify tidak bisa menyimpan kategori karena backend API be
    NODE_ENV=production
    ```
 
-4. **Deploy**:
+4. **Deploy & Dapatkan URL**:
    - Railway akan auto-deploy
    - Tunggu 2-3 menit sampai deploy selesai
-   - Catat URL yang diberikan (contoh: `https://rekal-api.up.railway.app`)
+   - **Cara mendapatkan URL**:
+     - Di dashboard Railway, klik service Anda
+     - Lihat bagian "Domains" atau "Settings"
+     - URL akan terlihat seperti: `https://rekal-api.up.railway.app` atau `https://your-app.railway.app`
+     - Atau klik "Generate Domain" jika belum ada
+   - Catat URL tersebut (contoh: `https://rekal-api.up.railway.app`)
+
 
 ### Alternatif: Cyclic.sh (Jika Railway Tidak Tersedia)
 
