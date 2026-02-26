@@ -1,0 +1,5 @@
+{
+  "name": "rekal-api",
+  "build": "cd server && npm install",
+  "start": "cd server && node src/index.js"
+}
