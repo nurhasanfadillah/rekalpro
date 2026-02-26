@@ -1,7 +1,36 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/db');
 
+// Helper: Promisify SQLite operations
+const runAsync = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function(err) {
+      if (err) reject(err);
+      else resolve({ lastID: this.lastID, changes: this.changes });
+    });
+  });
+};
+
+const getAsync = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+};
+
+const allAsync = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+};
+
 // Calculate HPP and related values
+
 function calculateCosts(totalMaterialCost, overheadPercentage, targetMarginPercentage) {
   // HPP = Total Biaya Material / (1 - Overhead%)
   const productionCost = totalMaterialCost / (1 - overheadPercentage / 100);
@@ -69,7 +98,7 @@ exports.getProductById = (req, res) => {
 };
 
 // Create product with BoM
-exports.createProduct = (req, res) => {
+exports.createProduct = async (req, res) => {
   const {
     name,
     description,
@@ -112,70 +141,71 @@ exports.createProduct = (req, res) => {
   // Calculate HPP and selling price
   const costs = calculateCosts(totalMaterialCost, overhead_percentage, target_margin_percentage);
   
-  db.serialize(() => {
-    db.run('BEGIN TRANSACTION');
+  try {
+    await runAsync('BEGIN TRANSACTION');
     
     // Insert product
-    db.run(
-      `INSERT INTO products (
-        id, name, description, image_url, overhead_percentage, target_margin_percentage,
-        total_material_cost, production_cost, estimated_selling_price, gross_profit_per_unit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        name.trim(),
-        description || '',
-        image_url || '',
-        overhead_percentage,
-        target_margin_percentage,
-        Math.round(totalMaterialCost * 100) / 100,
-        costs.productionCost,
-        costs.estimatedSellingPrice,
-        costs.grossProfitPerUnit
-      ],
-      function(err) {
-        if (err) {
-          db.run('ROLLBACK');
-          if (err.message.includes('UNIQUE constraint failed')) {
-            return res.status(400).json({ error: 'Product name already exists' });
-          }
-          return res.status(500).json({ error: err.message });
-        }
-        
-        // Insert BoM items
-        const stmt = db.prepare(
-          'INSERT INTO bill_of_materials (id, product_id, material_id, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)'
-        );
-        
-        let bomError = null;
-        for (const item of bomItems) {
-          stmt.run([item.id, id, item.material_id, item.price, item.quantity, item.subtotal], (err) => {
-            if (err) bomError = err;
-          });
-        }
-        stmt.finalize();
-        
-        if (bomError) {
-          db.run('ROLLBACK');
-          return res.status(500).json({ error: bomError.message });
-        }
-        
-        db.run('COMMIT', (err) => {
-          if (err) {
-            db.run('ROLLBACK');
-            return res.status(500).json({ error: err.message });
-          }
-          
-          // Return created product
-          exports.getProductById({ params: { id } }, res);
-        });
+    try {
+      await runAsync(
+        `INSERT INTO products (
+          id, name, description, image_url, overhead_percentage, target_margin_percentage,
+          total_material_cost, production_cost, estimated_selling_price, gross_profit_per_unit
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          name.trim(),
+          description || '',
+          image_url || '',
+          overhead_percentage,
+          target_margin_percentage,
+          Math.round(totalMaterialCost * 100) / 100,
+          costs.productionCost,
+          costs.estimatedSellingPrice,
+          costs.grossProfitPerUnit
+        ]
+      );
+    } catch (err) {
+      await runAsync('ROLLBACK');
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'Product name already exists' });
       }
+      throw err;
+    }
+    
+    // Insert BoM items sequentially to avoid race conditions
+    for (const item of bomItems) {
+      await runAsync(
+        'INSERT INTO bill_of_materials (id, product_id, material_id, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
+        [item.id, id, item.material_id, item.price, item.quantity, item.subtotal]
+      );
+    }
+    
+    await runAsync('COMMIT');
+    
+    // Return created product
+    const product = await getAsync('SELECT * FROM products WHERE id = ?', [id]);
+    const bomRows = await allAsync(
+      `SELECT b.*, m.name as material_name, m.unit as material_unit, c.name as category_name
+       FROM bill_of_materials b
+       JOIN materials m ON b.material_id = m.id
+       JOIN categories c ON m.category_id = c.id
+       WHERE b.product_id = ? ORDER BY m.name`,
+      [id]
     );
-  });
+    
+    res.status(201).json({
+      ...product,
+      bill_of_materials: bomRows
+    });
+  } catch (err) {
+    await runAsync('ROLLBACK').catch(() => {});
+    return res.status(500).json({ error: err.message });
+  }
 };
 
+
 // Update product with BoM
-exports.updateProduct = (req, res) => {
+exports.updateProduct = async (req, res) => {
   const { id } = req.params;
   const {
     name,
@@ -217,163 +247,154 @@ exports.updateProduct = (req, res) => {
   // Calculate HPP and selling price
   const costs = calculateCosts(totalMaterialCost, overhead_percentage, target_margin_percentage);
   
-  db.serialize(() => {
-    db.run('BEGIN TRANSACTION');
+  try {
+    await runAsync('BEGIN TRANSACTION');
     
     // Update product
-    db.run(
-      `UPDATE products SET
-        name = ?,
-        description = ?,
-        image_url = ?,
-        overhead_percentage = ?,
-        target_margin_percentage = ?,
-        total_material_cost = ?,
-        production_cost = ?,
-        estimated_selling_price = ?,
-        gross_profit_per_unit = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?`,
-      [
-        name.trim(),
-        description || '',
-        image_url || '',
-        overhead_percentage,
-        target_margin_percentage,
-        Math.round(totalMaterialCost * 100) / 100,
-        costs.productionCost,
-        costs.estimatedSellingPrice,
-        costs.grossProfitPerUnit,
-        id
-      ],
-      function(err) {
-        if (err) {
-          db.run('ROLLBACK');
-          if (err.message.includes('UNIQUE constraint failed')) {
-            return res.status(400).json({ error: 'Product name already exists' });
-          }
-          return res.status(500).json({ error: err.message });
-        }
-        
-        if (this.changes === 0) {
-          db.run('ROLLBACK');
-          return res.status(404).json({ error: 'Product not found' });
-        }
-        
-        // Delete old BoM items
-        db.run('DELETE FROM bill_of_materials WHERE product_id = ?', [id], (err) => {
-          if (err) {
-            db.run('ROLLBACK');
-            return res.status(500).json({ error: err.message });
-          }
-          
-          // Insert new BoM items
-          const stmt = db.prepare(
-            'INSERT INTO bill_of_materials (id, product_id, material_id, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)'
-          );
-          
-          let bomError = null;
-          for (const item of bomItems) {
-            stmt.run([item.id, id, item.material_id, item.price, item.quantity, item.subtotal], (err) => {
-              if (err) bomError = err;
-            });
-          }
-          stmt.finalize();
-          
-          if (bomError) {
-            db.run('ROLLBACK');
-            return res.status(500).json({ error: bomError.message });
-          }
-          
-          db.run('COMMIT', (err) => {
-            if (err) {
-              db.run('ROLLBACK');
-              return res.status(500).json({ error: err.message });
-            }
-            
-            // Return updated product
-            exports.getProductById({ params: { id } }, res);
-          });
-        });
+    let result;
+    try {
+      result = await runAsync(
+        `UPDATE products SET
+          name = ?,
+          description = ?,
+          image_url = ?,
+          overhead_percentage = ?,
+          target_margin_percentage = ?,
+          total_material_cost = ?,
+          production_cost = ?,
+          estimated_selling_price = ?,
+          gross_profit_per_unit = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+        [
+          name.trim(),
+          description || '',
+          image_url || '',
+          overhead_percentage,
+          target_margin_percentage,
+          Math.round(totalMaterialCost * 100) / 100,
+          costs.productionCost,
+          costs.estimatedSellingPrice,
+          costs.grossProfitPerUnit,
+          id
+        ]
+      );
+    } catch (err) {
+      await runAsync('ROLLBACK');
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'Product name already exists' });
       }
+      throw err;
+    }
+    
+    if (result.changes === 0) {
+      await runAsync('ROLLBACK');
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    
+    // Delete old BoM items
+    await runAsync('DELETE FROM bill_of_materials WHERE product_id = ?', [id]);
+    
+    // Insert new BoM items sequentially
+    for (const item of bomItems) {
+      await runAsync(
+        'INSERT INTO bill_of_materials (id, product_id, material_id, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
+        [item.id, id, item.material_id, item.price, item.quantity, item.subtotal]
+      );
+    }
+    
+    await runAsync('COMMIT');
+    
+    // Return updated product
+    const product = await getAsync('SELECT * FROM products WHERE id = ?', [id]);
+    const bomRows = await allAsync(
+      `SELECT b.*, m.name as material_name, m.unit as material_unit, c.name as category_name
+       FROM bill_of_materials b
+       JOIN materials m ON b.material_id = m.id
+       JOIN categories c ON m.category_id = c.id
+       WHERE b.product_id = ? ORDER BY m.name`,
+      [id]
     );
-  });
+    
+    res.json({
+      ...product,
+      bill_of_materials: bomRows
+    });
+  } catch (err) {
+    await runAsync('ROLLBACK').catch(() => {});
+    return res.status(500).json({ error: err.message });
+  }
 };
+
 
 // Delete product
-exports.deleteProduct = (req, res) => {
+exports.deleteProduct = async (req, res) => {
   const { id } = req.params;
 
-  // Check product exists first
-  db.get('SELECT id FROM products WHERE id = ?', [id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Product not found' });
+  try {
+    // Check product exists first
+    const row = await getAsync('SELECT id FROM products WHERE id = ?', [id]);
+    if (!row) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
 
-    db.serialize(() => {
-      db.run('BEGIN TRANSACTION');
+    await runAsync('BEGIN TRANSACTION');
 
+    try {
       // Explicitly delete BoM records first (belt-and-suspenders, tidak hanya mengandalkan CASCADE)
-      db.run('DELETE FROM bill_of_materials WHERE product_id = ?', [id], (err) => {
-        if (err) {
-          db.run('ROLLBACK');
-          return res.status(500).json({ error: err.message });
-        }
-
-        // Then delete the product
-        db.run('DELETE FROM products WHERE id = ?', [id], function(err) {
-          if (err) {
-            db.run('ROLLBACK');
-            return res.status(500).json({ error: err.message });
-          }
-
-          db.run('COMMIT', (err) => {
-            if (err) {
-              db.run('ROLLBACK');
-              return res.status(500).json({ error: err.message });
-            }
-            res.json({ message: 'Product deleted successfully' });
-          });
-        });
-      });
-    });
-  });
+      await runAsync('DELETE FROM bill_of_materials WHERE product_id = ?', [id]);
+      
+      // Then delete the product
+      await runAsync('DELETE FROM products WHERE id = ?', [id]);
+      
+      await runAsync('COMMIT');
+      
+      res.json({ message: 'Product deleted successfully' });
+    } catch (err) {
+      await runAsync('ROLLBACK');
+      throw err;
+    }
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };
 
+
 // Duplicate product
-exports.duplicateProduct = (req, res) => {
+exports.duplicateProduct = async (req, res) => {
   const { id } = req.params;
   
-  db.get('SELECT * FROM products WHERE id = ?', [id], (err, product) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+  try {
+    // Get original product
+    const product = await getAsync('SELECT * FROM products WHERE id = ?', [id]);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
     
     // Get BoM items
-    db.all('SELECT material_id, price, quantity FROM bill_of_materials WHERE product_id = ?', [id], (err, bomItems) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      // Create new product with "Copy of" prefix
-      const newProduct = {
-        name: `${product.name} (Copy)`,
-        description: product.description,
-        image_url: product.image_url,
-        overhead_percentage: product.overhead_percentage,
-        target_margin_percentage: product.target_margin_percentage,
-        bill_of_materials: bomItems.map(item => ({
-          material_id: item.material_id,
-          price: item.price,
-          quantity: item.quantity
-        }))
-      };
-      
-      // Use createProduct logic
-      req.body = newProduct;
-      exports.createProduct(req, res);
-    });
-  });
+    const bomItems = await allAsync(
+      'SELECT material_id, price, quantity FROM bill_of_materials WHERE product_id = ?',
+      [id]
+    );
+    
+    // Create new product with "Copy of" prefix
+    const newProduct = {
+      name: `${product.name} (Copy)`,
+      description: product.description,
+      image_url: product.image_url,
+      overhead_percentage: product.overhead_percentage,
+      target_margin_percentage: product.target_margin_percentage,
+      bill_of_materials: bomItems.map(item => ({
+        material_id: item.material_id,
+        price: item.price,
+        quantity: item.quantity
+      }))
+    };
+    
+    // Use createProduct logic by setting req.body and calling it
+    req.body = newProduct;
+    return exports.createProduct(req, res);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 };

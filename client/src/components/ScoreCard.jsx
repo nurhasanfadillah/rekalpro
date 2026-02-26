@@ -1,26 +1,59 @@
 import { TrendingUp, DollarSign, Package, Calculator, LayoutGrid } from 'lucide-react';
 
+const typeConfig = {
+  count: {
+    icon: LayoutGrid,
+    accent: 'border-l-indigo-500',
+    iconBg: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
+    valueColor: 'text-indigo-700',
+    bg: 'bg-white',
+  },
+  bom: {
+    icon: Package,
+    accent: 'border-l-blue-500',
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+    valueColor: 'text-blue-700',
+    bg: 'bg-white',
+  },
+  hpp: {
+    icon: Calculator,
+    accent: 'border-l-orange-500',
+    iconBg: 'bg-orange-100',
+    iconColor: 'text-orange-600',
+    valueColor: 'text-orange-700',
+    bg: 'bg-white',
+  },
+  selling: {
+    icon: DollarSign,
+    accent: 'border-l-emerald-500',
+    iconBg: 'bg-emerald-100',
+    iconColor: 'text-emerald-600',
+    valueColor: 'text-emerald-700',
+    bg: 'bg-white',
+  },
+  profit: {
+    icon: TrendingUp,
+    accent: 'border-l-violet-500',
+    iconBg: 'bg-violet-100',
+    iconColor: 'text-violet-600',
+    valueColor: 'text-violet-700',
+    bg: 'bg-white',
+  },
+  default: {
+    icon: DollarSign,
+    accent: 'border-l-gray-400',
+    iconBg: 'bg-gray-100',
+    iconColor: 'text-gray-600',
+    valueColor: 'text-gray-700',
+    bg: 'bg-white',
+  },
+};
+
 function ScoreCard({ title, value, subtitle, type = 'default' }) {
-  const icons = {
-    count: LayoutGrid,
-    bom: Package,
-    hpp: Calculator,
-    selling: DollarSign,
-    profit: TrendingUp,
-    default: DollarSign,
-  };
-
-  const colors = {
-    count: 'bg-indigo-50 border-indigo-200 text-indigo-900',
-    bom: 'bg-blue-50 border-blue-200 text-blue-900',
-    hpp: 'bg-orange-50 border-orange-200 text-orange-900',
-    selling: 'bg-green-50 border-green-200 text-green-900',
-    profit: 'bg-purple-50 border-purple-200 text-purple-900',
-    default: 'bg-gray-50 border-gray-200 text-gray-900',
-  };
-
-  const Icon = icons[type] || icons.default;
-  const colorClass = colors[type] || colors.default;
+  const config = typeConfig[type] || typeConfig.default;
+  const Icon = config.icon;
 
   const formatValue = (val) => {
     if (typeof val === 'number') {
@@ -38,17 +71,21 @@ function ScoreCard({ title, value, subtitle, type = 'default' }) {
   };
 
   return (
-    <div className={`card ${colorClass} border`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium opacity-80">{title}</p>
-          <p className="text-2xl font-bold mt-1">{formatValue(value)}</p>
+    <div className={`${config.bg} rounded-2xl shadow-sm border border-gray-100 border-l-4 ${config.accent} p-5 hover:shadow-md transition-all duration-200`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider truncate">
+            {title}
+          </p>
+          <p className={`text-xl font-bold mt-1.5 ${config.valueColor} leading-tight truncate`}>
+            {formatValue(value)}
+          </p>
           {subtitle && (
-            <p className="text-xs mt-1 opacity-70">{subtitle}</p>
+            <p className="text-xs text-gray-400 mt-1.5 truncate">{subtitle}</p>
           )}
         </div>
-        <div className={`p-3 rounded-full bg-white bg-opacity-50`}>
-          <Icon className="h-6 w-6" />
+        <div className={`flex-shrink-0 w-11 h-11 rounded-xl ${config.iconBg} flex items-center justify-center`}>
+          <Icon className={`h-5 w-5 ${config.iconColor}`} />
         </div>
       </div>
     </div>

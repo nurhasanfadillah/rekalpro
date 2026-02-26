@@ -1,0 +1,96 @@
+{
+  "name": "ReKal - Rekalkulasi HPP",
+  "short_name": "ReKal",
+  "description": "Aplikasi rekalkulasi harga pokok produksi untuk PT. Redone Berkah Mandiri",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "id",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "categories": ["business", "productivity", "finance"],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dashboard ReKal"
+    },
+    {
+      "src": "/screenshots/mobile-dashboard.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dashboard Mobile ReKal"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tambah Produk",
+      "short_name": "Produk Baru",
+      "description": "Tambah produk baru",
+      "url": "/products/new",
+      "icons": [{ "src": "/icons/shortcut-product.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Katalog Material",
+      "short_name": "Material",
+      "description": "Lihat katalog material",
+      "url": "/materials",
+      "icons": [{ "src": "/icons/shortcut-material.png", "sizes": "96x96" }]
+    }
+  ]
+}

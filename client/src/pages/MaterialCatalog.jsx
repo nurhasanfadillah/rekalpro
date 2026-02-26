@@ -1,38 +1,74 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Layers, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, Search, RefreshCw, WifiOff } from 'lucide-react';
 import { materialApi, categoryApi } from '../api';
+import { useOfflineMaterials } from '../hooks/useOfflineData';
 import MaterialModal from '../components/MaterialModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useToast } from '../context/ToastContext';
+
+function TableSkeleton() {
+  return (
+    <div className="table-container">
+      <div className="px-5 py-3.5 bg-gray-50 border-b border-gray-100 grid grid-cols-5 gap-4">
+        {['w-32', 'w-24', 'w-24', 'w-16', 'w-16'].map((w, i) => (
+          <div key={i} className={`skeleton h-3 ${w} rounded`} />
+        ))}
+      </div>
+      {[...Array(6)].map((_, i) => (
+        <div key={i} className={`px-5 py-4 grid grid-cols-5 gap-4 border-b border-gray-50 ${i % 2 !== 0 ? 'bg-gray-50/50' : ''}`}>
+          <div className="skeleton h-4 w-32 rounded" />
+          <div className="skeleton h-5 w-24 rounded-full" />
+          <div className="skeleton h-4 w-20 rounded" />
+          <div className="skeleton h-4 w-12 rounded" />
+          <div className="flex gap-2 justify-center">
+            <div className="skeleton h-8 w-8 rounded-lg" />
+            <div className="skeleton h-8 w-8 rounded-lg" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function MaterialCatalog() {
-  const [materials, setMaterials] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const { addToast } = useToast();
 
+  // Use offline-aware data fetching
+  const { 
+    data: materials, 
+    loading, 
+    error, 
+    isOffline, 
+    refresh,
+    fromCache 
+  } = useOfflineMaterials(materialApi);
+
+  // Fetch categories separately (lighter data)
   useEffect(() => {
-    fetchData();
+    const fetchCategories = async () => {
+      try {
+        const response = await categoryApi.getAll();
+        setCategories(response.data);
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+      }
+    };
+    fetchCategories();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [materialsRes, categoriesRes] = await Promise.all([
-        materialApi.getAll(),
-        categoryApi.getAll(),
-      ]);
-      setMaterials(materialsRes.data);
-      setCategories(categoriesRes.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
+  // Show toast when data is from cache
+  useEffect(() => {
+    if (fromCache && !loading) {
+      addToast('Menampilkan data material tersimpan', 'info');
     }
-  };
+  }, [fromCache, loading, addToast]);
 
   const handleAdd = () => {
     setSelectedMaterial(null);
@@ -44,6 +80,14 @@ function MaterialCatalog() {
     setModalOpen(true);
   };
 
+  const handleSave = () => {
+    refresh();
+    addToast(
+      selectedMaterial ? 'Material berhasil diperbarui' : 'Material berhasil ditambahkan',
+      'success'
+    );
+  };
+
   const handleDeleteClick = (material) => {
     setSelectedMaterial(material);
     setDeleteError(null);
@@ -52,14 +96,14 @@ function MaterialCatalog() {
 
   const handleDelete = async () => {
     if (!selectedMaterial) return;
-    
     setDeleting(true);
     setDeleteError(null);
     try {
       await materialApi.delete(selectedMaterial.id);
-      fetchData();
+      refresh();
       setDeleteDialog(false);
       setSelectedMaterial(null);
+      addToast('Material berhasil dihapus', 'success');
     } catch (error) {
       setDeleteError(error.response?.data?.error || 'Gagal menghapus material');
     } finally {
@@ -73,10 +117,15 @@ function MaterialCatalog() {
     setSelectedMaterial(null);
   };
 
-  const filteredMaterials = materials.filter(material =>
+  const handleRefresh = () => {
+    refresh();
+    addToast('Memperbarui data material...', 'info');
+  };
+
+  const filteredMaterials = materials?.filter(material =>
     material.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     material.category_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ) || [];
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('id-ID', {
@@ -87,98 +136,119 @@ function MaterialCatalog() {
     }).format(value || 0);
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-8 text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Memuat data...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Katalog Material</h1>
-          <p className="text-gray-600 mt-1">Kelola daftar bahan baku dan harga standar</p>
+          <h1 className="page-title">Katalog Material</h1>
+          <p className="page-subtitle">Kelola daftar bahan baku dan harga standar</p>
         </div>
-        <button
-          onClick={handleAdd}
-          className="btn-primary flex items-center gap-2 mt-4 sm:mt-0"
-        >
-          <Plus className="h-4 w-4" />
-          Tambah Material
-        </button>
-      </div>
-
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Cari material..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="input pl-10"
-          />
-        </div>
-      </div>
-
-      {/* Materials List */}
-      {filteredMaterials.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg shadow">
-          <Layers className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900">Belum ada material</h3>
-          <p className="text-gray-600 mt-2">Tambahkan material untuk digunakan dalam produk</p>
-          <button
-            onClick={handleAdd}
-            className="btn-primary inline-flex items-center gap-2 mt-4"
+        <div className="flex items-center gap-2">
+          {/* Refresh button - visible on mobile */}
+          <button 
+            onClick={handleRefresh}
+            disabled={loading}
+            className="md:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            title="Refresh data"
           >
+            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={handleAdd} className="btn-primary flex items-center gap-2">
             <Plus className="h-4 w-4" />
-            Tambah Material
+            <span className="hidden sm:inline">Tambah Material</span>
+            <span className="sm:hidden">Tambah</span>
           </button>
         </div>
+      </div>
+
+      {/* Offline indicator for cached data */}
+      {fromCache && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-2 text-blue-700 text-sm">
+          <WifiOff className="h-4 w-4" />
+          <span>Data dari penyimpanan lokal</span>
+          <button 
+            onClick={handleRefresh}
+            className="ml-auto text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+
+      {/* Search */}
+      <div className="search-wrapper">
+        <Search className="search-icon" />
+        <input
+          type="text"
+          placeholder="Cari material atau kategori..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="input-search"
+        />
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <TableSkeleton />
+      ) : filteredMaterials.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Layers className="h-8 w-8 text-gray-400" />
+          </div>
+          <h3 className="text-base font-semibold text-gray-900">
+            {searchTerm ? 'Material tidak ditemukan' : 'Belum ada material'}
+          </h3>
+          <p className="text-sm text-gray-500 mt-1 mb-5">
+            {searchTerm
+              ? `Tidak ada material yang cocok dengan "${searchTerm}"`
+              : 'Tambahkan material untuk digunakan dalam produk'}
+          </p>
+          {!searchTerm && (
+            <button onClick={handleAdd} className="btn-primary inline-flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Tambah Material
+            </button>
+          )}
+        </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <>
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block table-container">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="table-header">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Nama Material</th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-gray-700">Kategori</th>
-                  <th className="px-6 py-3 text-right text-sm font-medium text-gray-700">Harga Standar</th>
-                  <th className="px-6 py-3 text-center text-sm font-medium text-gray-700">Satuan</th>
-                  <th className="px-6 py-3 text-center text-sm font-medium text-gray-700">Aksi</th>
+                  <th className="table-th">Nama Material</th>
+                  <th className="table-th">Kategori</th>
+                  <th className="table-th-right">Harga Standar</th>
+                  <th className="table-th-center">Satuan</th>
+                  <th className="table-th-center">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredMaterials.map((material) => (
-                  <tr key={material.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{material.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {material.category_name}
-                      </span>
+              <tbody>
+                {filteredMaterials.map((material, index) => (
+                  <tr key={material.id} className={`table-row ${index % 2 !== 0 ? 'table-row-even' : ''}`}>
+                    <td className="table-td font-semibold text-gray-900">{material.name}</td>
+                    <td className="table-td">
+                      <span className="badge-blue">{material.category_name}</span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">
+                    <td className="table-td-right font-semibold text-gray-800">
                       {formatCurrency(material.standard_price)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 text-center">{material.unit}</td>
-                    <td className="px-6 py-4 text-sm text-center">
-                      <div className="flex items-center justify-center gap-2">
+                    <td className="table-td text-center text-gray-500">{material.unit}</td>
+                    <td className="table-td">
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => handleEdit(material)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                          title="Edit material"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteClick(material)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                          title="Hapus material"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -188,54 +258,49 @@ function MaterialCatalog() {
                 ))}
               </tbody>
             </table>
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+              <p className="text-xs text-gray-400">
+                Menampilkan <span className="font-semibold text-gray-600">{filteredMaterials.length}</span> material
+              </p>
+            </div>
           </div>
 
           {/* Mobile Cards */}
-          <div className="md:hidden divide-y divide-gray-200">
+          <div className="md:hidden grid grid-cols-1 gap-3">
             {filteredMaterials.map((material) => (
-              <div key={material.id} className="p-4 hover:bg-gray-50">
+              <div key={material.id} className="card">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-medium text-gray-900">{material.name}</h3>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mt-1">
-                      {material.category_name}
-                    </span>
+                    <h3 className="font-semibold text-gray-900 text-sm">{material.name}</h3>
+                    <span className="badge-blue mt-1 inline-block">{material.category_name}</span>
                   </div>
                   <div className="flex gap-1">
-                    <button
-                      onClick={() => handleEdit(material)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                    >
+                    <button onClick={() => handleEdit(material)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl">
                       <Edit className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteClick(material)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    >
+                    <button onClick={() => handleDeleteClick(material)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Harga: {formatCurrency(material.standard_price)}</span>
-                  <span className="text-gray-600">/{material.unit}</span>
+                <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                  <span>Harga: <span className="font-semibold text-gray-700">{formatCurrency(material.standard_price)}</span></span>
+                  <span>/{material.unit}</span>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
 
-      {/* Material Modal */}
       <MaterialModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         material={selectedMaterial}
         categories={categories}
-        onSave={fetchData}
+        onSave={handleSave}
       />
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={deleteDialog}
         onClose={handleDeleteClose}
